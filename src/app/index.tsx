@@ -57,7 +57,16 @@ function nativeKeyboardEasing(curve: KeyboardEventEasing | undefined) {
   }
 }
 
-export default function SongListScreen() {
+// React Native doesn't re-measure existing Text when Dynamic Type changes while
+// the app is open, so text is drawn at the new size inside its old, now too
+// small boxes and gets clipped. Remounting the screen on a font scale change
+// forces a fresh layout (search and filter state reset, which is rare enough).
+export default function SongListRoot() {
+  const { fontScale } = useWindowDimensions();
+  return <SongListScreen key={fontScale} />;
+}
+
+function SongListScreen() {
   const { songs, libraries, selectedLibraryIds, loading, error, refresh } = useSongs();
   const router = useRouter();
   const [search, setSearch] = React.useState('');
