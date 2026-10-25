@@ -51,10 +51,17 @@ npx expo start
 
 Open the result in the iOS Simulator, an Android emulator, or Expo Go on a physical device.
 
-> **Note:** this project is currently pinned to Expo SDK 54 rather than the latest release,
-> because the newer SDK's update to the Expo Go app was still pending Apple App Store review
-> at the time. Once that's approved, or if you're using a development build (EAS build) instead
-> of Expo Go, you can move back to the latest SDK with:
+> **Note:** this project is on Expo SDK 57 (React Native 0.86). The app needs iOS 16.4 or
+> later, or Android 7.0 (API 24) or later.
+>
+> - **Expo Go:** the SDK 57 version of Expo Go may not be in the App Store or Play Store yet.
+>   On an iPhone, install it with `eas go`. In the iOS Simulator or on Android, `npx expo start`
+>   installs it for you.
+> - **iOS 27:** builds made with Xcode 27 must use the UIKit scene life cycle. `app.json`
+>   turns this on with `expo-build-properties` → `ios.enableSceneSupport`, which needs
+>   `expo@57.0.23` or newer. SDK 58 does this by default, so remove the setting after upgrading.
+>
+> To move to a newer SDK later:
 > ```bash
 > npx expo install expo@latest
 > npx expo install --fix
