@@ -1,5 +1,5 @@
 import React from 'react';
-import { ColorValue, StyleSheet } from 'react-native';
+import { AccessibilityState, ColorValue, StyleSheet } from 'react-native';
 
 import { Icon, IconName } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
@@ -12,6 +12,7 @@ interface IconButtonProps {
   haptic?: 'light' | 'selection' | 'none';
   disabled?: boolean;
   accessibilityLabel: string;
+  accessibilityState?: AccessibilityState;
   hitSlop?: number;
 }
 
@@ -30,6 +31,7 @@ export function IconButton({
   haptic = 'light',
   disabled,
   accessibilityLabel,
+  accessibilityState,
   hitSlop = 10,
 }: IconButtonProps) {
   // The tap target only needs to be a little bigger than the glyph itself —
@@ -44,6 +46,7 @@ export function IconButton({
       style={[styles.button, { width: box, height: box }]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
       hitSlop={hitSlop}>
       <Icon name={name} color={color} size={size} />
     </Touchable>

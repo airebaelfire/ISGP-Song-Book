@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +22,16 @@ import { IconButton } from '@/components/icon-button';
 import { OriginFilterChips } from '@/components/origin-filter-chips';
 import { Touchable } from '@/components/touchable';
 import { colors, radius, spacing } from '@/constants/theme';
+import { useLibraryPillVisible } from '@/hooks/use-library-pill-visible';
 import { useSongs } from '@/store/songs-context';
+
+const LIBRARY_ICON_SIZE = 14;
+const LIBRARY_CHEVRON_SIZE = 10;
+const LIBRARY_PILL_PADDING_X = spacing.sm + 2;
+// Everything in the pill except its label: horizontal padding, both icons and
+// the two gaps between them and the text.
+const LIBRARY_PILL_CHROME_WIDTH =
+  LIBRARY_PILL_PADDING_X * 2 + LIBRARY_ICON_SIZE + LIBRARY_CHEVRON_SIZE + spacing.xs * 2;
 
 // iOS reports the keyboard's own animation curve on each show/hide event.
 // The previous code ignored it and always animated with Animated.timing's
@@ -45,12 +55,6 @@ function nativeKeyboardEasing(curve: KeyboardEventEasing | undefined) {
       // than the inOut default.
       return Easing.out(Easing.quad);
   }
-}
-
-// "ISGP BC", "ISGP BC + BWC", or "3 libraries".
-function selectionLabel(names: string[]) {
-  if (names.length <= 2) return names.join(' + ');
-  return `${names.length} libraries`;
 }
 
 export default function SongListScreen() {
@@ -118,6 +122,57 @@ export default function SongListScreen() {
   const hasLibraryChoice = libraries.length > 1;
   const selectedNames = libraries.filter((l) => selectedLibraryIds.includes(l.id)).map((l) => l.name);
 
+  // The library button shows/hides the pill (remembered across launches); the
+  // pill itself is what opens the picker.
+  const libraryPill = useLibraryPillVisible();
+  const [pillProgress] = React.useState(() => new Animated.Value(1));
+  // The row's natural height, measured while nothing constrains it: once known
+  // (or whenever the pill starts hidden) the row is absolutely positioned inside
+  // the animated container, so shrinking the container can't squash the row and
+  // feed a smaller height back into the measurement, and Dynamic Type changes
+  // are still picked up.
+  const [pillHeight, setPillHeight] = React.useState(0);
+  const pillRowFloating = pillHeight > 0 || !libraryPill.visible;
+  const pillAnimationReady = React.useRef(false);
+  // Apply the stored choice before first paint without animating, so a pill
+  // the user hid doesn't flash on launch; animate every change after that.
+  React.useLayoutEffect(() => {
+    if (!libraryPill.loaded) return;
+    const target = libraryPill.visible ? 1 : 0;
+    if (!pillAnimationReady.current) {
+      pillAnimationReady.current = true;
+      pillProgress.setValue(target);
+      return;
+    }
+    Animated.timing(pillProgress, {
+      toValue: target,
+      duration: 160,
+      useNativeDriver: false,
+    }).start();
+  }, [libraryPill.loaded, libraryPill.visible, pillProgress]);
+
+  // Pill label: all selected names joined with " + " if they fit on one line
+  // in the space available, otherwise "N libraries". Decided by measuring an
+  // invisible copy of the full label at the available width (so Dynamic Type
+  // is accounted for), keyed by label, width and font scale so a stale
+  // measurement is never used. Until the measurement for the current key
+  // arrives, the count is shown, which avoids a flash of names that don't fit.
+  // React Native doesn't re-measure existing text when Dynamic Type changes
+  // while the app is open, so the measuring copy is remounted (keyed) instead.
+  const { fontScale } = useWindowDimensions();
+  const [libraryRowWidth, setLibraryRowWidth] = React.useState(0);
+  const fullLibraryLabel = selectedNames.join(' + ');
+  const countLibraryLabel = `${selectedNames.length} ${selectedNames.length === 1 ? 'library' : 'libraries'}`;
+  const libraryLabelWidth = Math.max(0, libraryRowWidth - LIBRARY_PILL_CHROME_WIDTH);
+  const libraryMeasureKey = `${fontScale}|${libraryLabelWidth}|${fullLibraryLabel}`;
+  const [libraryLabelFit, setLibraryLabelFit] = React.useState<{ key: string; fits: boolean } | null>(
+    null
+  );
+  const libraryLabel =
+    libraryLabelFit?.key === libraryMeasureKey && libraryLabelFit.fits
+      ? fullLibraryLabel
+      : countLibraryLabel;
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     return songs.filter((s) => {
@@ -155,13 +210,15 @@ export default function SongListScreen() {
                 accessibilityLabel={showAndroidSearch ? 'Hide search' : 'Search songs'}
               />
             )}
-            {hasLibraryChoice && (
+            {hasLibraryChoice && libraryPill.loaded && (
               <IconButton
                 name="library"
-                onPress={() => router.push('/libraries')}
-                color={colors.accent}
+                onPress={libraryPill.toggle}
+                color={libraryPill.visible ? colors.accent : colors.textSecondary}
                 size={22}
-                accessibilityLabel="Choose libraries"
+                haptic="selection"
+                accessibilityLabel={libraryPill.visible ? 'Hide libraries' : 'Show libraries'}
+                accessibilityState={{ expanded: libraryPill.visible }}
               />
             )}
             <IconButton
@@ -174,26 +231,64 @@ export default function SongListScreen() {
           </View>
         </View>
 
-        {hasLibraryChoice && (
-          <View style={styles.libraryRow}>
-            <Touchable
-              onPress={() => router.push('/libraries')}
-              haptic="light"
-              accessibilityRole="button"
-              accessibilityLabel={`Libraries: ${selectedNames.join(', ')}. Change libraries`}>
-              <GlassView
-                glassEffectStyle="regular"
-                isInteractive
-                fallbackBackgroundColor={colors.surfaceAlt}
-                style={styles.libraryPill}>
-                <Icon name="library" color={colors.textSecondary} size={14} />
-                <Text style={styles.libraryPillText} numberOfLines={1}>
-                  {selectionLabel(selectedNames)}
+        {hasLibraryChoice && libraryPill.loaded && (
+          <Animated.View
+            style={[
+              styles.libraryCollapse,
+              {
+                opacity: pillProgress,
+                // Until the row's natural height is known, size it by content
+                // (or collapse it if it starts hidden; see pillRowFloating).
+                height:
+                  pillHeight > 0
+                    ? pillProgress.interpolate({ inputRange: [0, 1], outputRange: [0, pillHeight] })
+                    : libraryPill.visible
+                      ? undefined
+                      : 0,
+              },
+            ]}
+            pointerEvents={libraryPill.visible ? 'auto' : 'none'}
+            aria-hidden={!libraryPill.visible}>
+            <View
+              style={[styles.libraryRow, pillRowFloating && styles.libraryRowFloating]}
+              onLayout={(e) => {
+                setPillHeight(e.nativeEvent.layout.height);
+                setLibraryRowWidth(e.nativeEvent.layout.width - spacing.lg * 2);
+              }}>
+              <Touchable
+                onPress={() => router.push('/libraries')}
+                haptic="light"
+                accessibilityRole="button"
+                accessibilityLabel={`Libraries: ${selectedNames.join(', ')}`}>
+                <GlassView
+                  glassEffectStyle="regular"
+                  isInteractive
+                  fallbackBackgroundColor={colors.surfaceAlt}
+                  style={styles.libraryPill}>
+                  <Icon name="library" color={colors.textSecondary} size={LIBRARY_ICON_SIZE} />
+                  <Text style={styles.libraryPillText} numberOfLines={1}>
+                    {libraryLabel}
+                  </Text>
+                  <Icon name="chevronDown" color={colors.textSecondary} size={LIBRARY_CHEVRON_SIZE} />
+                </GlassView>
+              </Touchable>
+
+              {/* Invisible measuring copy of the full label (see libraryLabel). */}
+              {libraryLabelWidth > 0 && (
+                <Text
+                  key={libraryMeasureKey}
+                  style={[styles.libraryPillText, styles.libraryMeasure, { width: libraryLabelWidth }]}
+                  onTextLayout={(e) =>
+                    setLibraryLabelFit({ key: libraryMeasureKey, fits: e.nativeEvent.lines.length <= 1 })
+                  }
+                  pointerEvents="none"
+                  accessible={false}
+                  aria-hidden>
+                  {fullLibraryLabel}
                 </Text>
-                <Icon name="chevronDown" color={colors.textSecondary} size={10} />
-              </GlassView>
-            </Touchable>
-          </View>
+              )}
+            </View>
+          </Animated.View>
         )}
 
         {Platform.OS === 'android' && showAndroidSearch && (
@@ -317,16 +412,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
+  libraryCollapse: {
+    overflow: 'hidden',
+  },
   libraryRow: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
   },
+  libraryRowFloating: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+  },
+  libraryMeasure: {
+    position: 'absolute',
+    left: spacing.lg,
+    top: 0,
+    opacity: 0,
+    flexShrink: 0,
+  },
   libraryPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.sm + 2,
+    paddingHorizontal: LIBRARY_PILL_PADDING_X,
     paddingVertical: 5,
     borderRadius: radius.pill,
     overflow: 'hidden',
