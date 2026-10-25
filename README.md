@@ -1,56 +1,94 @@
-# Welcome to your Expo app 👋
+# ISGP Song Book
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Cross-platform (iOS + Android) song book app for the ISGP Undergraduate Seminar. Everyone
+browses/searches/transposes/exports the same shared list of songs; songs themselves are
+added, edited, or deleted directly in Supabase (see below), not in the app.
 
-## Get started
+## One-time setup
 
-1. Install dependencies
+### 1. Create a Supabase project
 
-   ```bash
-   npm install
-   ```
+Go to [supabase.com](https://supabase.com), create a free account/project if you don't have
+one already. Once it's ready, open **Project Settings > API** and note down:
 
-2. Start the app
+- **Project URL** (e.g. `https://xxxxxxxx.supabase.co`)
+- **anon public** key (a long JWT string)
 
-   ```bash
-   npx expo start
-   ```
+### 2. Create the database table
 
-In the output, you'll find options to open the app in a
+In the Supabase dashboard, open **SQL Editor > New query**, paste in the contents of
+[`supabase/schema.sql`](supabase/schema.sql), and run it. This creates the `songs` table,
+locks it down with Row Level Security (read-only from the app, writes only via the
+dashboard), enables Realtime, and inserts two sample songs so you can verify things work
+before importing your real song list.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 3. Configure the app
 
 ```bash
-npm run reset-project
+cp .env.example .env
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Edit `.env` and fill in the Project URL and anon key from step 1:
 
-### Other setup steps
+```
+EXPO_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+The anon key is safe to ship in the app — it can only ever *read* songs, because of the
+Row Level Security policy set up in step 2.
 
-## Learn more
+### 4. Install and run
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm install
+npx expo start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Open the result in the iOS Simulator, an Android emulator, or Expo Go on a physical device.
 
-## Join the community
+> **Note:** this project is currently pinned to Expo SDK 56 rather than the latest release,
+> because the SDK 57 update to the Expo Go app was still pending Apple App Store review at
+> the time. Once that's approved, or if you're using a development build (EAS build) instead
+> of Expo Go, you can move back to the latest SDK with:
+> ```bash
+> npx expo install expo@latest
+> npx expo install --fix
+> ```
+> Also update the version number in [`AGENTS.md`](AGENTS.md)'s doc link to match.
 
-Join our community of developers creating universal apps.
+## Managing songs
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Songs are managed entirely from the Supabase dashboard — **Table Editor > songs**. There's
+no login or edit screen in the app itself. Each row has:
+
+- `title`, `origin` — plain text
+- `capo` — the capo position the chords below are written for (integer, 0 = no capo)
+- `song` — the song body. Same format as the original RY Song Book app:
+  - Chords are written inline right before the syllable they belong to: `[C]like this`
+  - A `{...}label` block boxes a group of lines and shows a label in the corner. Everything
+    right after the closing `}` up to the next line break becomes the label, verbatim — so
+    it can be a repeat count (`}x2`, or just `}2`) or free text (`}Repeat twice`, `}Bridge`):
+    ```
+    {[C]Chorus line one
+    [F]Chorus line two}Repeat twice
+    ```
+- `strumming_pattern` — optional, e.g. `D-DUDU`
+
+See the two sample rows inserted by `schema.sql` for a working example. The app polls
+Realtime, so changes made in the dashboard show up in the app within a few seconds without
+needing to reinstall or restart it.
+
+## Re-theming
+
+All colors, spacing, and font tokens live in [`src/constants/theme.ts`](src/constants/theme.ts).
+To change the app's look, edit the values there — components reference named tokens
+(`colors.accent`, `spacing.md`, etc.), not raw hex codes or literal numbers, so a full
+re-skin is a one-file change.
+
+## Migrating songs from the old RY Song Book app
+
+Since this app's `song` field uses the exact same format as the old CloudKit-based app, no
+reformatting is needed — export existing records' `title`/`origin`/`song`/`capo`/
+`strumming_pattern` fields and insert them as rows into the new `songs` table (via the SQL
+Editor or Table Editor's CSV import).
