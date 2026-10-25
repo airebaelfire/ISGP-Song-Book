@@ -189,7 +189,9 @@ export default function SongListScreen() {
       {/* Static header block: title, filters — never scrolls. */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>ISGP Song Book</Text>
+          <Text style={styles.title} maxFontSizeMultiplier={1.5}>
+            ISGP Song Book
+          </Text>
           <View style={styles.titleActions}>
             {Platform.OS === 'android' && (
               <IconButton
@@ -403,11 +405,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   title: {
+    flexShrink: 1,
     fontSize: 30,
     fontWeight: '700',
     color: colors.text,
   },
   titleActions: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
