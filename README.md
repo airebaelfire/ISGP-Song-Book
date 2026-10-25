@@ -17,10 +17,14 @@ one already. Once it's ready, open **Project Settings > API** and note down:
 ### 2. Create the database table
 
 In the Supabase dashboard, open **SQL Editor > New query**, paste in the contents of
-[`supabase/schema.sql`](supabase/schema.sql), and run it. This creates the `songs` table,
-locks it down with Row Level Security (read-only from the app, writes only via the
-dashboard), enables Realtime, and inserts two sample songs so you can verify things work
-before importing your real song list.
+[`supabase/schema.sql`](supabase/schema.sql), and run it. This creates the `songs`,
+`libraries` and `library_songs` tables, locks them down with Row Level Security (read-only
+from the app, writes only via the dashboard), enables Realtime, and inserts two sample songs
+in an "ISGP BC" library so you can verify things work before importing your real song list.
+
+> **Upgrading an existing project** (set up before libraries existed)? Run
+> [`supabase/libraries.sql`](supabase/libraries.sql) instead. It adds the two library tables
+> and puts every existing song in "ISGP BC". It's safe to run more than once.
 
 ### 3. Configure the app
 
@@ -47,9 +51,9 @@ npx expo start
 
 Open the result in the iOS Simulator, an Android emulator, or Expo Go on a physical device.
 
-> **Note:** this project is currently pinned to Expo SDK 56 rather than the latest release,
-> because the SDK 57 update to the Expo Go app was still pending Apple App Store review at
-> the time. Once that's approved, or if you're using a development build (EAS build) instead
+> **Note:** this project is currently pinned to Expo SDK 54 rather than the latest release,
+> because the newer SDK's update to the Expo Go app was still pending Apple App Store review
+> at the time. Once that's approved, or if you're using a development build (EAS build) instead
 > of Expo Go, you can move back to the latest SDK with:
 > ```bash
 > npx expo install expo@latest
@@ -78,6 +82,61 @@ no login or edit screen in the app itself. Each row has:
 See the two sample rows inserted by `schema.sql` for a working example. The app polls
 Realtime, so changes made in the dashboard show up in the app within a few seconds without
 needing to reinstall or restart it.
+
+### Libraries
+
+Songs are grouped into libraries (e.g. "ISGP BC", "BWC", a neighbourhood's own list). In the
+app, people pick one or more libraries and see all of their songs together; "ISGP BC" is the
+default. A song is stored once in `songs` and can be in any number of libraries.
+
+- **Table Editor > libraries**: one row per library. `slug` is a unique, stable id (e.g.
+  `bwc`; the app's default is `isgp-bc`, so don't rename that one), `name` is what the app
+  shows, `description` is optional, and `sort_order` sets the order in the picker (lowest
+  first).
+- **Table Editor > library_songs**: one row per (library, song) pair. To add a song to a
+  library, insert a row with that `library_id` and `song_id`. Deleting a song or a library
+  removes its rows here automatically.
+
+A new song shows up in the app's list only once it's in at least one library. Until then,
+it can only be opened from a direct link. After adding songs, run this in the SQL Editor to
+find any that aren't in a library yet:
+
+```sql
+select s.id, s.title, s.origin
+from public.songs s
+left join public.library_songs ls on ls.song_id = s.id
+where ls.song_id is null
+order by s.title;
+```
+
+To put songs in a library in bulk, for example every song with a given origin:
+
+```sql
+insert into public.library_songs (library_id, song_id)
+select l.id, s.id
+from public.libraries l, public.songs s
+where l.slug = 'bwc' and s.origin = 'BWC'
+on conflict do nothing;
+```
+
+### Checking the database is read-only
+
+`scripts/check-rls.mjs` uses the anon key from `.env` to confirm the app can read `songs`,
+`libraries` and `library_songs` but can't insert, update or delete them:
+
+```bash
+npm run check-rls
+```
+
+By default it only does reads, no-op updates (setting a field to its current value) and an
+insert of a clearly labelled row (`RLS CHECK - safe to delete`). If that insert succeeds,
+RLS is broken and the script prints the row's id so you can delete it in the dashboard.
+`npm run check-rls -- --destructive` also tries deleting real rows. Run that **on a test
+project only**. It requires `LIVE_SUPABASE_PROJECT_REF` in `.env` (see `.env.example`) and
+refuses to run if `EXPO_PUBLIC_SUPABASE_URL` points at that project.
+
+[`supabase/test-library.sql`](supabase/test-library.sql) seeds a second library for
+testing. It's for test projects only. Never run it on the live database.
 
 ## Re-theming
 

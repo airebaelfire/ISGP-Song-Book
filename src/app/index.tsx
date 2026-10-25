@@ -47,8 +47,14 @@ function nativeKeyboardEasing(curve: KeyboardEventEasing | undefined) {
   }
 }
 
+// "ISGP BC", "ISGP BC + BWC", or "3 libraries".
+function selectionLabel(names: string[]) {
+  if (names.length <= 2) return names.join(' + ');
+  return `${names.length} libraries`;
+}
+
 export default function SongListScreen() {
-  const { songs, loading, error, refresh } = useSongs();
+  const { songs, libraries, selectedLibraryIds, loading, error, refresh } = useSongs();
   const router = useRouter();
   const [search, setSearch] = React.useState('');
   const [origin, setOrigin] = React.useState<string | null>(null);
@@ -100,6 +106,15 @@ export default function SongListScreen() {
     [songs]
   );
 
+  // After a library change, the selected origin may no longer exist among the
+  // visible songs — fall back to "All" rather than showing an empty list.
+  React.useEffect(() => {
+    if (origin && !origins.includes(origin)) setOrigin(null);
+  }, [origin, origins]);
+
+  const hasLibraryChoice = libraries.length > 1;
+  const selectedNames = libraries.filter((l) => selectedLibraryIds.includes(l.id)).map((l) => l.name);
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     return songs.filter((s) => {
@@ -137,6 +152,15 @@ export default function SongListScreen() {
                 accessibilityLabel={showAndroidSearch ? 'Hide search' : 'Search songs'}
               />
             )}
+            {hasLibraryChoice && (
+              <IconButton
+                name="library"
+                onPress={() => router.push('/libraries')}
+                color={colors.accent}
+                size={22}
+                accessibilityLabel="Choose libraries"
+              />
+            )}
             <IconButton
               name="shuffle"
               onPress={() => router.push('/random')}
@@ -146,6 +170,28 @@ export default function SongListScreen() {
             />
           </View>
         </View>
+
+        {hasLibraryChoice && (
+          <View style={styles.libraryRow}>
+            <Touchable
+              onPress={() => router.push('/libraries')}
+              haptic="light"
+              accessibilityRole="button"
+              accessibilityLabel={`Libraries: ${selectedNames.join(', ')}. Change libraries`}>
+              <GlassView
+                glassEffectStyle="regular"
+                isInteractive
+                fallbackBackgroundColor={colors.surfaceAlt}
+                style={styles.libraryPill}>
+                <Icon name="library" color={colors.textSecondary} size={14} />
+                <Text style={styles.libraryPillText} numberOfLines={1}>
+                  {selectionLabel(selectedNames)}
+                </Text>
+                <Icon name="chevronDown" color={colors.textSecondary} size={10} />
+              </GlassView>
+            </Touchable>
+          </View>
+        )}
 
         {Platform.OS === 'android' && showAndroidSearch && (
           <View style={styles.androidSearchRow}>
@@ -267,6 +313,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  libraryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  libraryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  libraryPillText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   androidSearchRow: {
     flexDirection: 'row',

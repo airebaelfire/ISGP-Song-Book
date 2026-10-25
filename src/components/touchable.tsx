@@ -1,6 +1,14 @@
 import * as Haptics from 'expo-haptics';
 import React, { useRef } from 'react';
-import { Animated, Platform, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import {
+  AccessibilityState,
+  Animated,
+  Platform,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  ViewStyle,
+} from 'react-native';
 
 import { colors } from '@/constants/theme';
 
@@ -17,8 +25,9 @@ interface TouchableProps {
   variant?: 'scale' | 'highlight';
   haptic?: 'light' | 'selection' | 'none';
   disabled?: boolean;
-  accessibilityRole?: 'button';
+  accessibilityRole?: 'button' | 'checkbox';
   accessibilityLabel?: string;
+  accessibilityState?: AccessibilityState;
   hitSlop?: number;
 }
 
@@ -37,6 +46,7 @@ export function Touchable({
   disabled,
   accessibilityRole,
   accessibilityLabel,
+  accessibilityState,
   hitSlop,
 }: TouchableProps) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -92,6 +102,7 @@ export function Touchable({
       disabled={disabled}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
       hitSlop={hitSlop}>
       <Animated.View
         style={[

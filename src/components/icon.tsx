@@ -26,6 +26,8 @@ const ICONS = {
   eye: { ios: 'eye', ionicon: 'eye-outline' },
   eyeSlash: { ios: 'eye.slash', ionicon: 'eye-off-outline' },
   xCircle: { ios: 'x.circle', ionicon: 'close-circle-outline' },
+  library: { ios: 'books.vertical', ionicon: 'library-outline' },
+  checkmark: { ios: 'checkmark', ionicon: 'checkmark' },
 } satisfies Record<string, { ios: SFSymbol; ionicon: ComponentProps<typeof Ionicons>['name'] }>;
 
 export type IconName = keyof typeof ICONS;

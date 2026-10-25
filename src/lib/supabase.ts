@@ -32,3 +32,18 @@ export interface Song {
   created_at: string;
   updated_at: string;
 }
+
+/** A row from the `libraries` table: a named list of songs (e.g. "ISGP BC"). */
+export interface Library {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+}
+
+/** A row from the `library_songs` join table: one song's membership in one library. */
+export interface LibrarySong {
+  library_id: string;
+  song_id: string;
+}

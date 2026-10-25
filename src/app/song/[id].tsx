@@ -29,8 +29,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function SongDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { songs } = useSongs();
-  const song = songs.find((s) => s.id === id);
+  // Look up in every song, not just the selected libraries, so a shared
+  // link (or a song outside the current selection) still opens.
+  const { allSongs } = useSongs();
+  const song = allSongs.find((s) => s.id === id);
   const [desiredCapo, setDesiredCapo] = React.useState(song?.capo ?? 0);
   const [showCapoPicker, setShowCapoPicker] = React.useState(false);
   const [showStrum, setShowStrum] = React.useState(false);

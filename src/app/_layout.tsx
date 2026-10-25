@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: 'ISGP Song Book' }} />
         <Stack.Screen name="song/[id]" options={{ title: '' }} />
         <Stack.Screen name="random" options={{ title: 'Random Song', presentation: 'modal' }} />
+        <Stack.Screen name="libraries" options={{ title: 'Libraries', presentation: 'modal' }} />
       </Stack>
     </SongsProvider>
   );
