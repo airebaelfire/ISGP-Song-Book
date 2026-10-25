@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, shadow } from '@/constants/theme';
@@ -19,7 +19,7 @@ export function CapoPicker({ value, onChange }: CapoPickerProps) {
   // onLayout reports the full border-box width; the segments live inside
   // the container's own padding.
   const segmentWidth = Math.max(0, containerWidth - CONTAINER_PADDING * 2) / CAPOS.length;
-  const thumbPosition = useRef(new Animated.Value(value)).current;
+  const [thumbPosition] = useState(() => new Animated.Value(value));
 
   useEffect(() => {
     Animated.spring(thumbPosition, {

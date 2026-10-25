@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import {
   AccessibilityState,
   Animated,
@@ -49,9 +49,9 @@ export function Touchable({
   accessibilityState,
   hitSlop,
 }: TouchableProps) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
-  const highlight = useRef(new Animated.Value(0)).current;
+  const [scale] = useState(() => new Animated.Value(1));
+  const [opacity] = useState(() => new Animated.Value(1));
+  const [highlight] = useState(() => new Animated.Value(0));
 
   const animateTo = (toScale: number, toOpacity: number, toHighlight: number) => {
     Animated.parallel([

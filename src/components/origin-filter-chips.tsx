@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Platform, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { GlassView } from '@/components/glass-view';
@@ -70,7 +70,7 @@ function AnimatedChip({
   active: boolean;
   onPress: () => void;
 }) {
-  const progress = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const [progress] = useState(() => new Animated.Value(active ? 1 : 0));
 
   useEffect(() => {
     Animated.timing(progress, {

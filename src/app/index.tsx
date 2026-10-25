@@ -65,15 +65,15 @@ export default function SongListScreen() {
   // (Rules of Hooks) — but react-native-safe-area-context recalculates
   // insets on every keyboard show/hide/frame-change event on iOS, and this
   // screen positions the floating search bar using these values. Stashing
-  // the first value in a ref freezes it, so the bar doesn't visibly shift
-  // every time the keyboard's presence changes the reported inset.
+  // the first value in state (never updated) freezes it, so the bar doesn't
+  // visibly shift every time the keyboard's presence changes the reported inset.
   const liveInsets = useSafeAreaInsets();
-  const insets = React.useRef(liveInsets).current;
+  const [insets] = React.useState(liveInsets);
 
   // Separately, actually lift the search bar above the keyboard — driven
   // by the keyboard's own reported height (a one-shot value per show/hide
   // event), not by the reactive inset above, so it can't glitch the same way.
-  const keyboardOffset = React.useRef(new Animated.Value(0)).current;
+  const [keyboardOffset] = React.useState(() => new Animated.Value(0));
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -108,9 +108,12 @@ export default function SongListScreen() {
 
   // After a library change, the selected origin may no longer exist among the
   // visible songs — fall back to "All" rather than showing an empty list.
-  React.useEffect(() => {
+  // Adjusted during render when `origins` changes, rather than in an effect.
+  const [prevOrigins, setPrevOrigins] = React.useState(origins);
+  if (origins !== prevOrigins) {
+    setPrevOrigins(origins);
     if (origin && !origins.includes(origin)) setOrigin(null);
-  }, [origin, origins]);
+  }
 
   const hasLibraryChoice = libraries.length > 1;
   const selectedNames = libraries.filter((l) => selectedLibraryIds.includes(l.id)).map((l) => l.name);

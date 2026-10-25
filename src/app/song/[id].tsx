@@ -40,11 +40,16 @@ export default function SongDetailScreen() {
   const fontSize = useFontSize();
   const captureRef_ = useRef<View>(null);
   const [sharing, setSharing] = React.useState(false);
-  const chevronRotation = useRef(new Animated.Value(0)).current;
+  const [chevronRotation] = React.useState(() => new Animated.Value(0));
 
-  React.useEffect(() => {
-    if (song) setDesiredCapo(song.capo);
-  }, [song?.id]);
+  // Reset the transpose target to the song's own capo whenever a different
+  // song is shown (or the song first arrives after loading). Adjusting state
+  // during render, rather than in an effect, avoids an extra render pass.
+  const [capoSongId, setCapoSongId] = React.useState(song?.id);
+  if (song && song.id !== capoSongId) {
+    setCapoSongId(song.id);
+    setDesiredCapo(song.capo);
+  }
 
   const toggleCapoPicker = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
