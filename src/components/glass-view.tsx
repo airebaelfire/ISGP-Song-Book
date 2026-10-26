@@ -1,6 +1,20 @@
-import { GlassView as ExpoGlassView, GlassStyle } from 'expo-glass-effect';
+import {
+  GlassView as ExpoGlassView,
+  GlassStyle,
+  isGlassEffectAPIAvailable,
+  isLiquidGlassAvailable,
+} from 'expo-glass-effect';
 import React from 'react';
 import { Platform, StyleProp, View, ViewStyle } from 'react-native';
+
+/**
+ * Whether real Liquid Glass can be drawn: iOS 26+ only. On older iOS,
+ * expo-glass-effect's GlassView renders as a bare transparent View (no
+ * material, no tint), so callers must style a fallback instead. Also false on
+ * the iOS 26 betas that lack the API, where using it can crash.
+ */
+export const hasLiquidGlass =
+  Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
 
 interface GlassViewProps {
   children?: React.ReactNode;
@@ -8,7 +22,7 @@ interface GlassViewProps {
   glassEffectStyle?: GlassStyle;
   tintColor?: string;
   isInteractive?: boolean;
-  /** Background applied on Android/web/pre-iOS26, where there's no real glass material. */
+  /** Background applied wherever there's no real glass material (see hasLiquidGlass). */
   fallbackBackgroundColor?: string;
 }
 
@@ -26,7 +40,7 @@ export function GlassView({
   isInteractive,
   fallbackBackgroundColor,
 }: GlassViewProps) {
-  if (Platform.OS === 'ios') {
+  if (hasLiquidGlass) {
     return (
       <ExpoGlassView
         glassEffectStyle={glassEffectStyle}

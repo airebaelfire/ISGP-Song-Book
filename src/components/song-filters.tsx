@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Animated, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { GlassView } from '@/components/glass-view';
+import { GlassView, hasLiquidGlass } from '@/components/glass-view';
 import { Touchable } from '@/components/touchable';
 import { colors, radius, spacing } from '@/constants/theme';
 import { FILTER_TABS, FilterTab, FilterValue } from '@/lib/song-format';
@@ -111,7 +111,9 @@ function Chip({
   active: boolean;
   onPress: () => void;
 }) {
-  if (Platform.OS === 'ios') {
+  // Without Liquid Glass (Android, web, iOS before 26) there's no glass
+  // material or tint to show the chip and its selected state, so use plain colours.
+  if (hasLiquidGlass) {
     return (
       <Touchable
         onPress={onPress}
