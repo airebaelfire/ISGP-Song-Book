@@ -17,7 +17,12 @@
  *
  * This is a direct port of that Swift parsing/transposition logic so
  * existing songs render identically without reformatting.
+ *
+ * Also home to the parsing of a song's filter values (origin, vibes,
+ * difficulty) for the home screen's filter chips — see songFilterValues.
  */
+
+import type { Song } from '@/lib/supabase';
 
 export const CHROMATIC_KEYS = [
   'C',
@@ -125,4 +130,127 @@ export function parseSong(song: string): Segment[] {
   }
 
   return segments;
+}
+
+// ---------------------------------------------------------------------------
+// Filter values (home screen chips)
+// ---------------------------------------------------------------------------
+
+export type FilterTab = 'origin' | 'vibe' | 'difficulty';
+
+export const FILTER_TABS: readonly FilterTab[] = ['origin', 'vibe', 'difficulty'];
+
+/**
+ * Values to show first in each tab's chip row, in this order (matched
+ * case-insensitively). Everything else follows alphabetically. Values listed
+ * here that no visible song uses are simply not shown.
+ */
+export const PREFERRED_ORIGIN_ORDER: readonly string[] = [];
+export const PREFERRED_VIBE_ORDER: readonly string[] = [];
+export const PREFERRED_DIFFICULTY_ORDER: readonly string[] = [];
+
+const PREFERRED_ORDER: Record<FilterTab, readonly string[]> = {
+  origin: PREFERRED_ORIGIN_ORDER,
+  vibe: PREFERRED_VIBE_ORDER,
+  difficulty: PREFERRED_DIFFICULTY_ORDER,
+};
+
+/** One filter value: `key` groups spellings case-insensitively, `label` is the spelling as written. */
+export interface FilterValue {
+  key: string;
+  label: string;
+}
+
+export type SongFilterValues = Record<FilterTab, FilterValue[]>;
+
+function toFilterValue(raw: string): FilterValue | null {
+  const label = raw.trim();
+  return label.length === 0 ? null : { key: label.toLowerCase(), label };
+}
+
+/** Splits a comma-separated column ("Hype, Mellow") into values: trimmed, no empties, no duplicates. */
+export function parseTagList(value: string | null | undefined): FilterValue[] {
+  if (!value) return [];
+  const seen = new Set<string>();
+  const values: FilterValue[] = [];
+  for (const part of value.split(',')) {
+    const v = toFilterValue(part);
+    if (v && !seen.has(v.key)) {
+      seen.add(v.key);
+      values.push(v);
+    }
+  }
+  return values;
+}
+
+// Keyed by the song object itself: every fetch creates new objects, so an
+// edited song is re-parsed and stale entries are garbage collected.
+const filterValuesCache = new WeakMap<Song, SongFilterValues>();
+
+/**
+ * A song's values for each filter tab. Origin is a single value (not split on
+ * commas); vibes and difficulty are comma-separated lists. Missing columns
+ * (supabase/tags.sql not run yet) give no values.
+ */
+export function songFilterValues(song: Song): SongFilterValues {
+  let values = filterValuesCache.get(song);
+  if (!values) {
+    const origin = song.origin ? toFilterValue(song.origin) : null;
+    values = {
+      origin: origin ? [origin] : [],
+      vibe: parseTagList(song.vibes),
+      difficulty: parseTagList(song.difficulty),
+    };
+    filterValuesCache.set(song, values);
+  }
+  return values;
+}
+
+/**
+ * The chips for one tab: every value used by at least one of `visibleSongs`,
+ * labelled with its most common spelling across `allSongs` (so a label doesn't
+ * change when libraries do; ties go to the alphabetically first spelling), in
+ * PREFERRED_*_ORDER first and then alphabetical order.
+ */
+export function buildFilterOptions(allSongs: Song[], visibleSongs: Song[], tab: FilterTab): FilterValue[] {
+  const visibleKeys = new Set<string>();
+  for (const song of visibleSongs) {
+    for (const v of songFilterValues(song)[tab]) visibleKeys.add(v.key);
+  }
+  if (visibleKeys.size === 0) return [];
+
+  const spellings = new Map<string, Map<string, number>>();
+  for (const song of allSongs) {
+    for (const v of songFilterValues(song)[tab]) {
+      if (!visibleKeys.has(v.key)) continue;
+      let counts = spellings.get(v.key);
+      if (!counts) spellings.set(v.key, (counts = new Map()));
+      counts.set(v.label, (counts.get(v.label) ?? 0) + 1);
+    }
+  }
+
+  const options: FilterValue[] = [];
+  for (const key of visibleKeys) {
+    // visibleSongs is a subset of allSongs, so every visible key has spellings.
+    // Spellings of one key differ only in case/inner spacing, so ties compare
+    // by code point, which prefers capitalised forms ("Mellow" over "mellow").
+    let best: string | null = null;
+    let bestCount = 0;
+    for (const [label, count] of spellings.get(key) ?? []) {
+      if (count > bestCount || (count === bestCount && best !== null && label < best)) {
+        best = label;
+        bestCount = count;
+      }
+    }
+    options.push({ key, label: best ?? key });
+  }
+
+  const preferred = PREFERRED_ORDER[tab].map((v) => v.trim().toLowerCase());
+  const rank = (key: string) => {
+    const i = preferred.indexOf(key);
+    return i === -1 ? preferred.length : i;
+  };
+  return options.sort(
+    (a, b) => rank(a.key) - rank(b.key) || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+  );
 }

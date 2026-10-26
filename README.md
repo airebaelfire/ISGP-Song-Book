@@ -25,6 +25,10 @@ in an "ISGP BC" library so you can verify things work before importing your real
 > **Upgrading an existing project** (set up before libraries existed)? Run
 > [`supabase/libraries.sql`](supabase/libraries.sql) instead. It adds the two library tables
 > and puts every existing song in "ISGP BC". It's safe to run more than once.
+>
+> **Upgrading a project set up before vibes and difficulty existed?** Also run
+> [`supabase/tags.sql`](supabase/tags.sql). It only adds the two optional columns, so older
+> app versions keep working, and it's safe to run more than once.
 
 ### 3. Configure the app
 
@@ -85,10 +89,49 @@ no login or edit screen in the app itself. Each row has:
     [F]Chorus line two}Repeat twice
     ```
 - `strumming_pattern` — optional, e.g. `D-DUDU`
+- `vibes`, `difficulty` — optional, comma-separated values, e.g. `Hype, Mellow` or
+  `Easy chords, No capo`. A song can have several values in each, or none. They become the
+  home screen's Vibe and Difficulty filter chips (alongside Origin, which is one value).
+  Spaces around values are ignored and case doesn't matter, so `Mellow`, `mellow` and
+  ` Mellow ` are the same chip, shown with whichever spelling most songs use. Chips are
+  alphabetical; to put some first, list them in `PREFERRED_VIBE_ORDER` /
+  `PREFERRED_DIFFICULTY_ORDER` / `PREFERRED_ORIGIN_ORDER` in
+  [`src/lib/song-format.ts`](src/lib/song-format.ts). A tab with no values is hidden.
 
 See the two sample rows inserted by `schema.sql` for a working example. The app polls
 Realtime, so changes made in the dashboard show up in the app within a few seconds without
 needing to reinstall or restart it.
+
+To spot typos and case variants, list every vibe and difficulty value with how many songs
+use it and each spelling seen:
+
+```sql
+select kind, lower(value) as value, count(distinct id) as songs,
+       string_agg(distinct value, ' | ') as spellings
+from (
+  select s.id, 'vibe' as kind, btrim(v, E' \t\r\n') as value
+  from public.songs s, unnest(string_to_array(s.vibes, ',')) as v
+  union all
+  select s.id, 'difficulty', btrim(d, E' \t\r\n')
+  from public.songs s, unnest(string_to_array(s.difficulty, ',')) as d
+) t
+where value <> ''
+group by kind, lower(value)
+order by kind, lower(value);
+```
+
+And to find songs with no vibes, or no difficulty:
+
+```sql
+select 'no vibes' as missing, s.id, s.title
+from public.songs s
+where coalesce(btrim(s.vibes, E' ,\t\r\n'), '') = ''
+union all
+select 'no difficulty', s.id, s.title
+from public.songs s
+where coalesce(btrim(s.difficulty, E' ,\t\r\n'), '') = ''
+order by missing, title;
+```
 
 ### Libraries
 
@@ -135,15 +178,18 @@ on conflict do nothing;
 npm run check-rls
 ```
 
-By default it only does reads, no-op updates (setting a field to its current value) and an
-insert of a clearly labelled row (`RLS CHECK - safe to delete`). If that insert succeeds,
+By default it only does reads, no-op updates (setting a field to its current value), an
+attempt to change one song's `vibes` and `difficulty` (put back straight away if it gets
+through) and an insert of a clearly labelled row (`RLS CHECK - safe to delete`). If that insert succeeds,
 RLS is broken and the script prints the row's id so you can delete it in the dashboard.
 `npm run check-rls -- --destructive` also tries deleting real rows. Run that **on a test
 project only**. It requires `LIVE_SUPABASE_PROJECT_REF` in `.env` (see `.env.example`) and
 refuses to run if `EXPO_PUBLIC_SUPABASE_URL` points at that project.
 
 [`supabase/test-library.sql`](supabase/test-library.sql) seeds a second library for
-testing. It's for test projects only. Never run it on the live database.
+testing, and [`supabase/test-tags.sql`](supabase/test-tags.sql) fills in vibes and
+difficulty on the test songs. They're for test projects only. Never run them on the live
+database.
 
 ## Re-theming
 

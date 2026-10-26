@@ -1,0 +1,49 @@
+-- ISGP Song Book — vibes & difficulty migration
+-- Run this in your Supabase project's SQL Editor on a project that was set up
+-- with an older schema.sql (before vibes and difficulty existed). Safe to run
+-- more than once: both statements skip columns that already exist.
+--
+-- Both columns hold comma-separated values, e.g.
+--   vibes:      Hype, Mellow
+--   difficulty: Easy chords, No capo
+-- A song can have several values in each, or none (leave it empty). The app
+-- trims spaces and groups values case-insensitively, so "Mellow", "mellow" and
+-- " Mellow " are one filter chip, labelled with the most common spelling.
+--
+-- Only adds two nullable columns; nothing existing is renamed, removed or
+-- changed, so older app versions keep working. No Row Level Security or
+-- Realtime changes are needed: the existing "Songs are publicly readable"
+-- policy is per row (so it covers every column), anon's table-level select
+-- grant includes columns added later, and songs is already in the
+-- supabase_realtime publication for all columns.
+
+alter table public.songs add column if not exists vibes text;
+alter table public.songs add column if not exists difficulty text;
+
+-- Every distinct vibe and difficulty value, with how many songs use it and
+-- every spelling seen, to spot typos and case variants:
+--
+-- select kind, lower(value) as value, count(distinct id) as songs,
+--        string_agg(distinct value, ' | ') as spellings
+-- from (
+--   select s.id, 'vibe' as kind, btrim(v, E' \t\r\n') as value
+--   from public.songs s, unnest(string_to_array(s.vibes, ',')) as v
+--   union all
+--   select s.id, 'difficulty', btrim(d, E' \t\r\n')
+--   from public.songs s, unnest(string_to_array(s.difficulty, ',')) as d
+-- ) t
+-- where value <> ''
+-- group by kind, lower(value)
+-- order by kind, lower(value);
+--
+-- Songs with no vibes, and songs with no difficulty (empty, or only commas
+-- and spaces, counts as none):
+--
+-- select 'no vibes' as missing, s.id, s.title
+-- from public.songs s
+-- where coalesce(btrim(s.vibes, E' ,\t\r\n'), '') = ''
+-- union all
+-- select 'no difficulty', s.id, s.title
+-- from public.songs s
+-- where coalesce(btrim(s.difficulty, E' ,\t\r\n'), '') = ''
+-- order by missing, title;

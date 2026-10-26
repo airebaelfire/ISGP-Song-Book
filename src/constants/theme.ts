@@ -14,6 +14,7 @@ export const colors = {
   separator: '#C6C6C8', // separator
   text: '#000000', // label
   textSecondary: '#8E8E93', // secondaryLabel
+  textMuted: '#636366', // systemGray (dark); unlike textSecondary, meets 4.5:1 on background
   accent: '#007AFF', // systemBlue
   accentText: '#FFFFFF',
   accentSoft: '#E8F0FE', // light tint of accent, for badges on a white/light surface

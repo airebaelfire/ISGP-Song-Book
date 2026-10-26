@@ -25,7 +25,7 @@ interface TouchableProps {
   variant?: 'scale' | 'highlight';
   haptic?: 'light' | 'selection' | 'none';
   disabled?: boolean;
-  accessibilityRole?: 'button' | 'checkbox';
+  accessibilityRole?: 'button' | 'checkbox' | 'tab';
   accessibilityLabel?: string;
   accessibilityState?: AccessibilityState;
   hitSlop?: number;

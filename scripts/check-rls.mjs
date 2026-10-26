@@ -2,7 +2,8 @@
 // Checks that Row Level Security keeps songs, libraries and library_songs
 // read-only for the app's anon key.
 //
-//   node scripts/check-rls.mjs                # reads, no-op updates, labelled inserts
+//   node scripts/check-rls.mjs                # reads, no-op updates, a reverted tag
+//                                             # update, labelled inserts
 //   node scripts/check-rls.mjs --destructive  # also deletes real rows: TEST PROJECTS ONLY
 //
 // Reads EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY from .env.
@@ -21,6 +22,9 @@ import { fileURLToPath } from 'node:url';
 
 const INSERT_LABEL = 'RLS CHECK - safe to delete';
 const RLS_VIOLATION = '42501';
+// Column doesn't exist: PostgREST's schema cache (PGRST204) or Postgres (42703).
+const MISSING_COLUMN = ['PGRST204', '42703'];
+const TAG_CHECK_VALUE = 'RLS CHECK';
 
 function loadEnv() {
   const path = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
@@ -206,6 +210,46 @@ async function checkUpdate(table, sample) {
   }
 }
 
+/**
+ * Tries a real change to a song's vibes and difficulty, in case a column-level
+ * or update policy treats them differently from the no-op update above. If it
+ * gets through, the original values are put back straight away.
+ */
+async function checkTagUpdate(sample) {
+  if (!sample) {
+    record('songs', 'update tags', 'SKIP', 'table is empty');
+    return;
+  }
+  const filter = matchKey(sample, TABLES.songs.key);
+  const { data, error } = await supabase
+    .from('songs')
+    .update({ vibes: TAG_CHECK_VALUE, difficulty: TAG_CHECK_VALUE })
+    .match(filter)
+    .select();
+  if (error && MISSING_COLUMN.includes(error.code)) {
+    record('songs', 'update tags', 'SKIP', 'no vibes/difficulty columns yet (run supabase/tags.sql)');
+    return;
+  }
+  const after = await readRow('songs', filter);
+  const unchanged = after !== null && JSON.stringify(after) === JSON.stringify(sample);
+  const affected = data?.length ?? 0;
+  if (affected === 0 && unchanged) {
+    record('songs', 'update tags', 'PASS', error ? `blocked (${error.code})` : 'affected 0 rows, row unchanged');
+    return;
+  }
+  const restore = await supabase
+    .from('songs')
+    .update({ vibes: sample.vibes ?? null, difficulty: sample.difficulty ?? null })
+    .match(filter);
+  record(
+    'songs',
+    'update tags',
+    'FAIL',
+    `affected ${affected} row(s); row ${unchanged ? 'unchanged' : 'CHANGED'}` +
+      (unchanged ? '' : restore.error ? `; restore failed (${restore.error.message})` : '; original values restored')
+  );
+}
+
 async function checkDelete(table, sample) {
   if (!destructive) {
     record(table, 'delete', 'SKIP', 'needs --destructive (test projects only)');
@@ -240,6 +284,7 @@ for (const table of Object.keys(TABLES)) {
   if (samples[table] === undefined) continue; // read failed; nothing else is meaningful
   await checkInsert(table, samples);
   await checkUpdate(table, samples[table]);
+  if (table === 'songs') await checkTagUpdate(samples.songs);
 }
 // Deletes last, join table first, so a broken policy on one table can't
 // cascade away the rows another test relies on.
@@ -250,14 +295,14 @@ for (const table of ['library_songs', 'libraries', 'songs']) {
 
 const host = new URL(url).hostname;
 console.log(`\nRLS check against ${host}${destructive ? ' (destructive)' : ''}\n`);
-const order = ['read', 'insert', 'update', 'delete'];
+const order = ['read', 'insert', 'update', 'update tags', 'delete'];
 results.sort(
   (a, b) =>
     Object.keys(TABLES).indexOf(a.table) - Object.keys(TABLES).indexOf(b.table) ||
     order.indexOf(a.operation) - order.indexOf(b.operation)
 );
 for (const r of results) {
-  console.log(`${r.status.padEnd(8)} ${r.table.padEnd(14)} ${r.operation.padEnd(7)} ${r.detail}`);
+  console.log(`${r.status.padEnd(8)} ${r.table.padEnd(14)} ${r.operation.padEnd(11)} ${r.detail}`);
 }
 
 const bad = results.filter((r) => r.status === 'FAIL' || r.status === 'UNCLEAR');

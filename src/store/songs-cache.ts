@@ -37,6 +37,11 @@ function isStringOrNull(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
+/** For columns that may not exist yet (added after a release), so may be missing. */
+function isOptionalStringOrNull(value: unknown): value is string | null | undefined {
+  return value === undefined || isStringOrNull(value);
+}
+
 function isSong(value: unknown): value is Song {
   return (
     isObject(value) &&
@@ -46,6 +51,8 @@ function isSong(value: unknown): value is Song {
     typeof value.capo === 'number' &&
     typeof value.song === 'string' &&
     isStringOrNull(value.strumming_pattern) &&
+    isOptionalStringOrNull(value.vibes) &&
+    isOptionalStringOrNull(value.difficulty) &&
     typeof value.created_at === 'string' &&
     typeof value.updated_at === 'string'
   );

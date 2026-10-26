@@ -29,6 +29,13 @@ export interface Song {
   capo: number;
   song: string;
   strumming_pattern: string | null;
+  /**
+   * Comma-separated values, e.g. "Hype, Mellow" (see parseTagList). Optional:
+   * undefined until supabase/tags.sql has been run, or in an older cache.
+   */
+  vibes?: string | null;
+  /** Comma-separated values, e.g. "Easy chords, No capo". Same as `vibes`. */
+  difficulty?: string | null;
   created_at: string;
   updated_at: string;
 }

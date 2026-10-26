@@ -19,11 +19,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassView } from '@/components/glass-view';
 import { Icon } from '@/components/icon';
 import { IconButton } from '@/components/icon-button';
-import { OriginFilterChips } from '@/components/origin-filter-chips';
+import { SongFilters } from '@/components/song-filters';
 import { Touchable } from '@/components/touchable';
 import { colors, radius, spacing } from '@/constants/theme';
+import { useFilterTabPrefs } from '@/hooks/use-filter-tab-prefs';
 import { useLibraryPillVisible } from '@/hooks/use-library-pill-visible';
+import { buildFilterOptions, FILTER_TABS, FilterTab, songFilterValues } from '@/lib/song-format';
 import { useSongs } from '@/store/songs-context';
+
+const NO_FILTERS: Record<FilterTab, string[]> = { origin: [], vibe: [], difficulty: [] };
 
 const LIBRARY_ICON_SIZE = 14;
 const LIBRARY_CHEVRON_SIZE = 10;
@@ -67,10 +71,14 @@ export default function SongListRoot() {
 }
 
 function SongListScreen() {
-  const { songs, libraries, selectedLibraryIds, loading, error, refresh } = useSongs();
+  const { allSongs, songs, libraries, selectedLibraryIds, loading, error, refresh } = useSongs();
   const router = useRouter();
   const [search, setSearch] = React.useState('');
-  const [origin, setOrigin] = React.useState<string | null>(null);
+  // Chip selections, by key (see songFilterValues). Deliberately not
+  // persisted: they reset on relaunch, so a hidden chip row can't hide a
+  // filter the user forgot about.
+  const [selectedFilters, setSelectedFilters] = React.useState(NO_FILTERS);
+  const filterTab = useFilterTabPrefs();
   const [showAndroidSearch, setShowAndroidSearch] = React.useState(false);
   const androidSearchInputRef = React.useRef<TextInput>(null);
 
@@ -113,20 +121,42 @@ function SongListScreen() {
     };
   }, [insets.bottom, keyboardOffset]);
 
-  const origins = React.useMemo(
-    () =>
-      Array.from(new Set(songs.map((s) => s.origin).filter((o): o is string => !!o))).sort(),
-    [songs]
+  // Chips only for values used by songs in the selected libraries.
+  const filterOptions = React.useMemo(
+    () => ({
+      origin: buildFilterOptions(allSongs, songs, 'origin'),
+      vibe: buildFilterOptions(allSongs, songs, 'vibe'),
+      difficulty: buildFilterOptions(allSongs, songs, 'difficulty'),
+    }),
+    [allSongs, songs]
   );
 
-  // After a library change, the selected origin may no longer exist among the
-  // visible songs — fall back to "All" rather than showing an empty list.
-  // Adjusted during render when `origins` changes, rather than in an effect.
-  const [prevOrigins, setPrevOrigins] = React.useState(origins);
-  if (origins !== prevOrigins) {
-    setPrevOrigins(origins);
-    if (origin && !origins.includes(origin)) setOrigin(null);
+  // After a library change or a data update, a selected chip may no longer
+  // exist among the visible songs — drop it rather than filtering by
+  // something that can't be seen or unselected. Adjusted during render when
+  // the options change, rather than in an effect.
+  const [prevFilterOptions, setPrevFilterOptions] = React.useState(filterOptions);
+  if (filterOptions !== prevFilterOptions) {
+    setPrevFilterOptions(filterOptions);
+    const pruned = { ...selectedFilters };
+    let changed = false;
+    for (const tab of FILTER_TABS) {
+      const keys = new Set(filterOptions[tab].map((o) => o.key));
+      const kept = selectedFilters[tab].filter((k) => keys.has(k));
+      if (kept.length !== selectedFilters[tab].length) {
+        pruned[tab] = kept;
+        changed = true;
+      }
+    }
+    if (changed) setSelectedFilters(pruned);
   }
+
+  const hasActiveFilters = FILTER_TABS.some((tab) => selectedFilters[tab].length > 0);
+  const toggleFilter = (tab: FilterTab, key: string) =>
+    setSelectedFilters((prev) => ({
+      ...prev,
+      [tab]: prev[tab].includes(key) ? prev[tab].filter((k) => k !== key) : [...prev[tab], key],
+    }));
 
   const hasLibraryChoice = libraries.length > 1;
   const selectedNames = libraries.filter((l) => selectedLibraryIds.includes(l.id)).map((l) => l.name);
@@ -184,12 +214,14 @@ function SongListScreen() {
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
+    const activeTabs = FILTER_TABS.filter((tab) => selectedFilters[tab].length > 0);
     return songs.filter((s) => {
-      if (origin && s.origin !== origin) return false;
       if (q && !s.title.toLowerCase().includes(q)) return false;
-      return true;
+      // Any selected chip within a tab; every tab that has a selection.
+      const values = songFilterValues(s);
+      return activeTabs.every((tab) => values[tab].some((v) => selectedFilters[tab].includes(v.key)));
     });
-  }, [songs, search, origin]);
+  }, [songs, search, selectedFilters]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -328,7 +360,16 @@ function SongListScreen() {
           </View>
         )}
 
-        <OriginFilterChips origins={origins} selected={origin} onSelect={setOrigin} />
+        {filterTab.loaded && (
+          <SongFilters
+            options={filterOptions}
+            selected={selectedFilters}
+            onToggle={toggleFilter}
+            tab={filterTab.tab}
+            chipsVisible={filterTab.chipsVisible}
+            onPressTab={filterTab.pressTab}
+          />
+        )}
 
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
@@ -339,8 +380,15 @@ function SongListScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}>
-          {filtered.length === 0 && !loading ? (
-            <Text style={styles.empty}>No songs found.</Text>
+          {filtered.length === 0 && !loading && hasActiveFilters ? (
+            <View style={styles.emptyFilters}>
+              <Text style={styles.emptyText}>No songs match these filters</Text>
+              <Touchable onPress={() => setSelectedFilters(NO_FILTERS)} accessibilityRole="button">
+                <Text style={styles.clearFilters}>Clear filters</Text>
+              </Touchable>
+            </View>
+          ) : filtered.length === 0 && !loading ? (
+            <Text style={[styles.emptyText, styles.empty]}>No songs found.</Text>
           ) : (
             <View style={styles.card}>
               {filtered.map((song, i) => (
@@ -506,10 +554,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
   },
-  empty: {
+  emptyText: {
     textAlign: 'center',
     color: colors.textSecondary,
+  },
+  empty: {
     marginTop: spacing.xl,
+  },
+  emptyFilters: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  clearFilters: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   error: {
     color: colors.danger,

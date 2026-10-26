@@ -10,9 +10,17 @@ create table if not exists public.songs (
   capo int not null default 0,
   song text not null,
   strumming_pattern text,
+  -- Comma-separated values, e.g. 'Hype, Mellow' and 'Easy chords, No capo'.
+  vibes text,
+  difficulty text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Re-running on a table created before vibes/difficulty existed (same as
+-- supabase/tags.sql):
+alter table public.songs add column if not exists vibes text;
+alter table public.songs add column if not exists difficulty text;
 
 -- Keep updated_at current on every edit made from Supabase Studio.
 create or replace function public.set_updated_at()
@@ -128,20 +136,24 @@ end $$;
 
 -- A couple of sample songs in the reference app's format, so you can verify
 -- the app works end-to-end before importing your real song list.
-insert into public.songs (title, origin, capo, song, strumming_pattern) values
+insert into public.songs (title, origin, capo, song, strumming_pattern, vibes, difficulty) values
 (
   'Sample Song',
   'ISGP Seminar',
   2,
   E'[C]This is a sample [F]verse line one\n[G]And a second [C]line here\n{[C]This is the chorus, [F]repeated twice\n[G]With its own [C]line}2\n[C]Back to a closing [F]line after the chorus',
-  'D-DUDU'
+  'D-DUDU',
+  'Hype, Mellow',
+  'Easy chords'
 ),
 (
   'Another Example',
   'Devotional',
   0,
   E'[Am]Opening line of [F]the song\n[C]Second line [G]goes here\n{[Am]Bridge or chorus [F]content\n[C]Shown in a [G]box}3',
-  'D--U-U-U'
+  'D--U-U-U',
+  'Mellow',
+  'Easy chords, No capo'
 );
 
 -- The app's default library. Every song should belong to at least one library,
